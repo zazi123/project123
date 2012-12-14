@@ -6,7 +6,7 @@ from functools import partial
 
 class Analyzer(object):
 	def __init__(self, numUser=50, numRating=6, numHiddenFeatures = 5, weightDecay = 1.):
-		self.k = 5
+		self.k = numHiddenFeatures
 		self.U = numUser
 		self.V = numRating
 		self.Lambda = weightDecay
@@ -15,7 +15,7 @@ class Analyzer(object):
 		self.W = self.initParam((self.k, self.U, self.V))
 		
 	def initParam(self, shape):
-		return np.random.standard_normal(shape)*0.1
+		return np.random.standard_normal(shape)*0.1*10.
 		
 	def foldParam(self, P, W):
 		return np.concatenate((P.reshape(-1), W.reshape(-1)))
@@ -54,6 +54,16 @@ class Analyzer(object):
 		
 		return R
 		
+	def normalizeRating(self, R, mask):
+		R_mean = np.zeros((R.shape[0], R.shape[2]))
+		R_norm = np.zeros(R.shape)
+		for i in range(R.shape[2]):
+			for j in range(R.shape[0]):
+				R_mean[j,i] = (R[j,:,i][mask[j,:,i].nonzero()]).mean()
+				R_norm[j,:,i][mask[j,:,i].nonzero()] = R[j,:,i][mask[j,:,i].nonzero()] - R_mean[j,i]
+		self.R_mean = R_mean
+		return R_norm, R_mean
+				
 		
 	def costFunc(self, Theta, R, mask):
 		P,W = self.unfoldParam(Theta)
@@ -75,6 +85,9 @@ class Analyzer(object):
 			D[i] = np.sqrt(((self.P - self.P[i])**2).sum(1))
 			
 		return D
+		
+	def predictRMatrix(self):
+		return self.prodM(self.P, self.W)
 
 
 	def trainModel(self, R, mask, maxfun=100, iprint=1.):
@@ -86,7 +99,16 @@ class Analyzer(object):
 		
 		self.unvecParam(Theta)
 		return cost
-
+	
+	def completeTrainModel(self, R, maxfun=100, iprint=1.):
+		mask = 1. - np.tile(np.eye(R.shape[0])[:,:,np.newaxis], (1,1,R.shape[2]))
+		return self.trainModel(R, mask, maxfun=maxfun, iprint=iprint)
+		
+	def testPredictionError(self, R):
+		diagInv = 1. - np.tile(np.eye(R.shape[0])[:,:,np.newaxis], (1,1,R.shape[2]))
+		return (((self.predictRMatrix() - R)*diagInv)**2).sum() / (R.shape[0]*(R.shape[1]-1.)*R.shape[2])
+		
+		
 
 
 
